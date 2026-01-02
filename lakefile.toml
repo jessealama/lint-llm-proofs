@@ -1,0 +1,10 @@
+name = "lint-llm-proofs"
+version = "0.1.0"
+defaultTargets = ["LintLlmProofs"]
+
+[[lean_lib]]
+name = "LintLlmProofs"
+
+[[lean_lib]]
+name = "Test"
+globs = ["Test.+"]
