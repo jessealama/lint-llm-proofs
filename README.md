@@ -48,6 +48,32 @@ example : True := by
   trivial
 ```
 
+### Have-Rewrite Linter (`linter.haveRw`)
+
+Detects when a `have` introduces a hypothesis that is immediately used in a `rw`
+and nothing else. This verbose pattern could often be simplified with `simp`.
+
+**Enable:**
+```lean
+import LintLlmProofs
+set_option linter.haveRw true
+```
+
+**Example flagged code:**
+```lean
+example (a b c : Nat) (hab : a = b) (hbc : b = c) : a = c := by
+  have h : a = b := hab
+  rw [h]        -- Warning: have followed by rw using only that hypothesis
+  exact hbc
+```
+
+**Suggested fix:**
+```lean
+example (a b c : Nat) (hab : a = b) (hbc : b = c) : a = c := by
+  simp only [hab]
+  exact hbc
+```
+
 ## License
 
 MIT
