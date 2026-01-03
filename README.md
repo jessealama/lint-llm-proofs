@@ -1,6 +1,13 @@
 # LintLLMProofs
 
-Lean 4 linters for detecting patterns typical of LLM-generated proofs.
+Lean 4 linters for detecting patterns typical of LLM-generated proofs, with automatic fix suggestions.
+
+## Features
+
+- Detects 5 common LLM proof anti-patterns
+- **Auto-fix support**: Clickable suggestions in any LSP-compatible editor (VS Code, Emacs, Neovim, etc.)
+- All linters disabled by default for opt-in usage
+- Configurable per-file, per-section, or project-wide
 
 ## Installation
 
@@ -18,138 +25,178 @@ require lintLlmProofs from git
   "https://github.com/jessealama/lint-llm-proofs" @ "main"
 ```
 
-## Available Linters
+Then run `lake update`.
 
-### Nested Have Linter (`linter.nestedHave`)
+## Usage
 
-Detects nested `have` statements where a `have`'s proof contains another `have`.
-LLMs often produce deeply nested `have` chains instead of flattening them.
+### Enabling Linters
 
-**Enable:**
+All linters are disabled by default. Enable them with `set_option`:
+
 ```lean
 import LintLlmProofs
+
 set_option linter.nestedHave true
+set_option linter.haveRw true
+set_option linter.simpRfl true
+set_option linter.sequentialIntros true
+set_option linter.constructorExact true
 ```
 
-**Example flagged code:**
+### Scoped Configuration
+
+Enable for a specific section:
 ```lean
-example : True := by
-  have h1 : 1 = 1 := by
-    have h2 : 2 = 2 := rfl  -- Warning: nested have
-    rfl
+section MyProofs
+  set_option linter.sequentialIntros true
+  -- linter active here
+end MyProofs
+-- linter inactive here
+```
+
+Disable for a specific declaration:
+```lean
+set_option linter.nestedHave true  -- enabled for file
+
+set_option linter.nestedHave false in
+example : True := by  -- no warning here
+  have h1 := by have h2 := rfl; rfl
   trivial
 ```
 
-**Suggested fix:**
+### Project-Wide Configuration
+
+Add to your `lakefile.toml` to enable linters for all files:
+
+```toml
+[[lean_lib]]
+name = "MyProject"
+moreLeanArgs = [
+  "-Dlinter.nestedHave=true",
+  "-Dlinter.simpRfl=true",
+  "-Dlinter.sequentialIntros=true",
+  "-Dlinter.constructorExact=true",
+  "-Dlinter.haveRw=true"
+]
+```
+
+### Command-Line Usage
+
+Run linters on a single file:
+```bash
+lake env lean -Dlinter.nestedHave=true MyProject/MyFile.lean
+```
+
+## Auto-Fix Support
+
+All linters provide clickable auto-fix suggestions via Lean 4's LSP code actions. In supported editors:
+
+1. Hover over the warning to see the suggested fix with an inline diff
+2. Click the suggestion or use the editor's "Quick Fix" action (lightbulb menu)
+3. The fix is applied automatically
+
+The diff display shows deletions with strikethrough and insertions underlined.
+
+## Available Linters
+
+| Linter | Option | Pattern | Auto-Fix |
+|--------|--------|---------|----------|
+| Nested Have | `linter.nestedHave` | `have` inside `have` body | Hoist inner `have` |
+| Have-Rewrite | `linter.haveRw` | `have h := e; rw [h]` | `rw [e]` |
+| Simp-Rfl | `linter.simpRfl` | `simp; rfl` | Remove `rfl` |
+| Sequential Intros | `linter.sequentialIntros` | `intro x; intro y` | `intro x y` |
+| Constructor-Exact | `linter.constructorExact` | `constructor; exact a; exact b` | `exact ⟨a, b⟩` |
+
+### Nested Have (`linter.nestedHave`)
+
+Detects nested `have` statements. LLMs often produce deeply nested chains instead of flattening them.
+
 ```lean
+-- Flagged:
 example : True := by
-  have h2 : 2 = 2 := rfl  -- Hoisted
+  have h1 : 1 = 1 := by
+    have h2 : 2 = 2 := rfl  -- Warning
+    rfl
+  trivial
+
+-- Suggested:
+example : True := by
+  have h2 : 2 = 2 := rfl
   have h1 : 1 = 1 := rfl
   trivial
 ```
 
-### Have-Rewrite Linter (`linter.haveRw`)
+### Have-Rewrite (`linter.haveRw`)
 
-Detects when a `have` introduces a hypothesis that is immediately used in a `rw`
-and nothing else. This verbose pattern could often be simplified with `simp`.
+Detects `have h := e; rw [h]` where `h` is only used once.
 
-**Enable:**
 ```lean
-import LintLlmProofs
-set_option linter.haveRw true
-```
-
-**Example flagged code:**
-```lean
-example (a b c : Nat) (hab : a = b) (hbc : b = c) : a = c := by
+-- Flagged:
+example (hab : a = b) (hbc : b = c) : a = c := by
   have h : a = b := hab
-  rw [h]        -- Warning: have followed by rw using only that hypothesis
+  rw [h]  -- Warning
+  exact hbc
+
+-- Suggested:
+example (hab : a = b) (hbc : b = c) : a = c := by
+  rw [hab]
   exact hbc
 ```
 
-**Suggested fix:**
+### Simp-Rfl (`linter.simpRfl`)
+
+Detects redundant `rfl` after `simp`.
+
 ```lean
-example (a b c : Nat) (hab : a = b) (hbc : b = c) : a = c := by
-  simp only [hab]
-  exact hbc
-```
-
-### Simp-Rfl Redundancy Linter (`linter.simpRfl`)
-
-Detects when `simp` is immediately followed by `rfl` or `exact rfl`. If `simp`
-succeeds, it should close reflexivity goals. The trailing `rfl` is either
-redundant or indicates `simp` didn't fully work.
-
-**Enable:**
-```lean
-import LintLlmProofs
-set_option linter.simpRfl true
-```
-
-**Example flagged code:**
-```lean
+-- Flagged:
 example (a : Nat) : a + 0 = a := by
   simp
-  rfl  -- Warning: redundant after simp
-```
+  rfl  -- Warning: redundant
 
-**Suggested fix:**
-```lean
+-- Suggested:
 example (a : Nat) : a + 0 = a := by
   simp
 ```
 
-### Sequential Intros Linter (`linter.sequentialIntros`)
+### Sequential Intros (`linter.sequentialIntros`)
 
-Detects when multiple `intro` tactics appear consecutively instead of being
-combined into a single `intro x y z`.
+Detects consecutive `intro` tactics that should be combined.
 
-**Enable:**
 ```lean
-import LintLlmProofs
-set_option linter.sequentialIntros true
-```
-
-**Example flagged code:**
-```lean
+-- Flagged:
 example : forall x y z : Nat, x = x := by
   intro x
-  intro y  -- Warning: sequential intro
-  intro z  -- Warning: sequential intro
+  intro y  -- Warning
+  intro z
   rfl
-```
 
-**Suggested fix:**
-```lean
+-- Suggested:
 example : forall x y z : Nat, x = x := by
   intro x y z
   rfl
 ```
 
-### Constructor-Exact Pattern Linter (`linter.constructorExact`)
+### Constructor-Exact (`linter.constructorExact`)
 
-Detects when `constructor` is followed by two `exact` tactics for simple
-pair/And constructions. This verbose pattern could be replaced with
-anonymous constructor syntax `⟨h1, h2⟩`.
+Detects verbose pair construction.
 
-**Enable:**
 ```lean
-import LintLlmProofs
-set_option linter.constructorExact true
-```
-
-**Example flagged code:**
-```lean
+-- Flagged:
 example (h1 : P) (h2 : Q) : P ∧ Q := by
-  constructor     -- Warning: could use ⟨_, _⟩
+  constructor  -- Warning
   exact h1
   exact h2
-```
 
-**Suggested fix:**
-```lean
+-- Suggested:
 example (h1 : P) (h2 : Q) : P ∧ Q := by
   exact ⟨h1, h2⟩
+```
+
+## Development
+
+```bash
+lake build        # Build library
+lake build Test   # Run tests (uses #guard_msgs)
 ```
 
 ## License
