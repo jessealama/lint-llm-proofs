@@ -6,7 +6,11 @@ set_option linter.simpRfl true
 /--
 error: No goals to be solved
 ---
-warning: `rfl` immediately after `simp` is often redundant. Consider removing it or using `simp only [...]` if `simp` doesn't close the goal.
+warning: `rfl` immediately after `simp` is often redundant.
+
+Hint: Remove the redundant `rfl`.
+  simp
+  ̵ ̵ ̵r̵f̵l̵
 
 Note: This linter can be disabled with `set_option linter.simpRfl false`
 -/

@@ -4,7 +4,10 @@ set_option linter.nestedHave true
 
 -- Should trigger warning: nested have
 /--
-warning: Nested `have` detected. Consider hoisting this `have` to the outer scope for clearer proof structure.
+warning: Nested `have` detected.
+
+Hint: Hoist this `have` before the outer `have`.
+  have h2 : 2 = 2 := rfl
 
 Note: This linter can be disabled with `set_option linter.nestedHave false`
 -/
@@ -30,11 +33,19 @@ example : True := by
 
 -- Should trigger warning: deeply nested have (flags both inner haves)
 /--
-warning: Nested `have` detected. Consider hoisting this `have` to the outer scope for clearer proof structure.
+warning: Nested `have` detected.
+
+Hint: Hoist this `have` before the outer `have`.
+  have h2 : 2 = 2 := by
+        have h3 : 3 = 3 := rfl
+        rfl
 
 Note: This linter can be disabled with `set_option linter.nestedHave false`
 ---
-warning: Nested `have` detected. Consider hoisting this `have` to the outer scope for clearer proof structure.
+warning: Nested `have` detected.
+
+Hint: Hoist this `have` before the outer `have`.
+  have h3 : 3 = 3 := rfl
 
 Note: This linter can be disabled with `set_option linter.nestedHave false`
 -/

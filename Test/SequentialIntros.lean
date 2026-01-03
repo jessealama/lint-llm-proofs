@@ -5,7 +5,11 @@ set_option linter.unusedVariables false
 
 -- Should trigger warning: two consecutive intros
 /--
-warning: Sequential `intro` tactics detected. Consider combining into a single `intro x y z`.
+warning: Sequential `intro` tactics detected.
+
+Hint: Combine into single `intro`.
+  intro x̵
+  ̵ ̵ ̵i̵n̵t̵r̵o̵ ̵y̵
 
 Note: This linter can be disabled with `set_option linter.sequentialIntros false`
 -/
@@ -15,13 +19,14 @@ example : ∀ x y : Nat, x = x := by
   intro y
   rfl
 
--- Should trigger two warnings: three consecutive intros
+-- Should trigger one warning: three consecutive intros (combined into one suggestion)
 /--
-warning: Sequential `intro` tactics detected. Consider combining into a single `intro x y z`.
+warning: Sequential `intro` tactics detected.
 
-Note: This linter can be disabled with `set_option linter.sequentialIntros false`
----
-warning: Sequential `intro` tactics detected. Consider combining into a single `intro x y z`.
+Hint: Combine into single `intro`.
+  intro x̵
+  ̵ ̵ ̵i̵n̵t̵r̵o̵ ̵y̵
+  ̵ ̵ ̵i̵n̵t̵r̵o̵ ̵z̵
 
 Note: This linter can be disabled with `set_option linter.sequentialIntros false`
 -/

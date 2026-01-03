@@ -4,6 +4,7 @@ Released under MIT license as described in the file LICENSE.
 Authors: Jesse Alama
 -/
 import Lean.Elab.Command
+import Lean.Meta.Hint
 
 /-!
 # Constructor-Exact Pattern Linter
@@ -66,8 +67,22 @@ partial def flattenTactics (stx : Syntax) : Array Syntax :=
   else
     stx.getArgs.foldl (fun acc child => acc ++ flattenTactics child) #[]
 
-/-- Find constructor-exact patterns. Flags constructor when followed by exactly 2 exacts. -/
-partial def findConstructorExactPatterns (stx : Syntax) : Array Syntax := Id.run do
+/-- Extract the term argument from an exact tactic. Returns the first non-keyword child. -/
+def getExactArg (stx : Syntax) : Option String := Id.run do
+  for arg in stx.getArgs do
+    -- Skip the "exact" keyword
+    if let .atom _ val := arg then
+      if val == "exact" then continue
+    -- If it's an identifier, return its name
+    if arg.isIdent then
+      return some arg.getId.toString
+    -- For other terms, use prettyPrint
+    if !arg.isAtom then
+      return some (toString arg.prettyPrint)
+  return none
+
+/-- Find constructor-exact patterns. Returns (constructor, exact1, exact2) tuples. -/
+partial def findConstructorExactPatterns (stx : Syntax) : Array (Syntax × Syntax × Syntax) := Id.run do
   let mut results := #[]
 
   let tactics := flattenTactics stx
@@ -82,9 +97,15 @@ partial def findConstructorExactPatterns (stx : Syntax) : Array Syntax := Id.run
         -- Make sure there's not a third exact (i.e., it's specifically a pair)
         let hasThirdExact := if i + 3 < tactics.size then isExactTactic tactics[i + 3]! else false
         if !hasThirdExact then
-          results := results.push tac1
+          results := results.push (tac1, tac2, tac3)
 
   return results
+
+/-- Create a syntax node spanning from start of stx1 to end of stx2. -/
+def mkSpanningSyntax (stx1 stx2 : Syntax) : Option Syntax := do
+  let range1 ← stx1.getRange?
+  let range2 ← stx2.getRange?
+  return Syntax.ofRange ⟨range1.start, range2.stop⟩
 
 /-- The constructor-exact linter: detects `constructor; exact h1; exact h2` patterns.
 
@@ -95,9 +116,19 @@ def constructorExactLinter : Linter where run := withSetOptionIn fun stx => do
     return
   if (← MonadState.get).messages.hasErrors then
     return
-  for ctorStx in findConstructorExactPatterns stx do
-    Linter.logLint linter.constructorExact ctorStx
-      "`constructor` followed by `exact` tactics. Consider using `exact ⟨_, _⟩` instead."
+  for (ctorStx, exact1, exact2) in findConstructorExactPatterns stx do
+    let msg := m!"`constructor` followed by `exact` tactics."
+    -- Extract arguments from both exact tactics
+    let arg1 := getExactArg exact1 |>.getD "_"
+    let arg2 := getExactArg exact2 |>.getD "_"
+    let fixStr := s!"exact ⟨{arg1}, {arg2}⟩"
+
+    let suggestion : Meta.Hint.Suggestion := {
+      suggestion := fixStr
+      span? := mkSpanningSyntax ctorStx exact2
+    }
+    let hint ← liftCoreM <| MessageData.hint m!"Use anonymous constructor." #[suggestion]
+    Linter.logLint linter.constructorExact ctorStx (msg ++ hint)
 
 initialize addLinter constructorExactLinter
 

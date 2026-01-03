@@ -4,6 +4,7 @@ Released under MIT license as described in the file LICENSE.
 Authors: Jesse Alama
 -/
 import Lean.Elab.Command
+import Lean.Meta.Hint
 
 /-!
 # Simp-Rfl Redundancy Linter
@@ -73,8 +74,8 @@ partial def flattenTactics (stx : Syntax) : Array Syntax :=
   else
     stx.getArgs.foldl (fun acc child => acc ++ flattenTactics child) #[]
 
-/-- Find simp-rfl patterns in tactic sequences. -/
-partial def findSimpRflPatterns (stx : Syntax) : Array Syntax := Id.run do
+/-- Find simp-rfl patterns in tactic sequences. Returns (simpStx, rflStx) pairs. -/
+partial def findSimpRflPatterns (stx : Syntax) : Array (Syntax × Syntax) := Id.run do
   let mut results := #[]
 
   let tactics := flattenTactics stx
@@ -84,9 +85,15 @@ partial def findSimpRflPatterns (stx : Syntax) : Array Syntax := Id.run do
       let tac1 := tactics[i]!
       let tac2 := tactics[i + 1]!
       if isSimpTactic tac1 && isRflOrExactRfl tac2 then
-        results := results.push tac2
+        results := results.push (tac1, tac2)
 
   return results
+
+/-- Create a syntax node spanning from start of stx1 to end of stx2. -/
+def mkSpanningSyntax (stx1 stx2 : Syntax) : Option Syntax := do
+  let range1 ← stx1.getRange?
+  let range2 ← stx2.getRange?
+  return Syntax.ofRange ⟨range1.start, range2.stop⟩
 
 /-- The simp-rfl linter: detects `simp; rfl` or `simp; exact rfl` patterns.
 
@@ -98,10 +105,15 @@ def simpRflLinter : Linter where run := withSetOptionIn fun stx => do
     return
   -- Note: We intentionally don't check hasErrors because the pattern we detect
   -- often causes errors (redundant rfl after simp closes the goal).
-  for rflStx in findSimpRflPatterns stx do
-    Linter.logLint linter.simpRfl rflStx
-      "`rfl` immediately after `simp` is often redundant. \
-       Consider removing it or using `simp only [...]` if `simp` doesn't close the goal."
+  for (simpStx, rflStx) in findSimpRflPatterns stx do
+    let msg := m!"`rfl` immediately after `simp` is often redundant."
+    -- Create auto-fix suggestion: replace simp + rfl span with just simp
+    let suggestion : Meta.Hint.Suggestion := {
+      suggestion := (⟨simpStx⟩ : TSyntax `tactic)
+      span? := mkSpanningSyntax simpStx rflStx
+    }
+    let hint ← liftCoreM <| MessageData.hint m!"Remove the redundant `rfl`." #[suggestion]
+    Linter.logLint linter.simpRfl rflStx (msg ++ hint)
 
 initialize addLinter simpRflLinter
 

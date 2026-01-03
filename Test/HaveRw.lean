@@ -4,7 +4,11 @@ set_option linter.haveRw true
 
 -- Should trigger warning: have followed by rw using only that hypothesis
 /--
-warning: `have` immediately followed by `rw` using only that hypothesis. Consider using `simp` instead.
+warning: `have` immediately followed by `rw` using only that hypothesis.
+
+Hint: Inline the expression.
+  h̵a̵v̵e̵ ̵h̵ ̵:̵ ̵a̵ ̵=̵ ̵b̵ ̵:̵=̵ ̵h̵a̵b̵
+  ̵ ̵ ̵r̵w̵ ̵[̵h̵]̵r̲w̲ ̲[̲h̲a̲b̲]̲
 
 Note: This linter can be disabled with `set_option linter.haveRw false`
 -/

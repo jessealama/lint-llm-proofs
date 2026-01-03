@@ -4,7 +4,12 @@ set_option linter.constructorExact true
 
 -- Should trigger warning: constructor followed by two exact
 /--
-warning: `constructor` followed by `exact` tactics. Consider using `exact ⟨_, _⟩` instead.
+warning: `constructor` followed by `exact` tactics.
+
+Hint: Use anonymous constructor.
+  c̵o̵n̵s̵t̵r̵u̵c̵t̵o̵r̵
+  ̵ ̵ ̵e̵x̵a̵c̵t̵ ̵h̵1̵
+  ̵ ̵ ̵e̵x̵a̵c̵t̵ ̵h̵2̵e̲x̲a̲c̲t̲ ̲⟨̲h̲1̲,̲ ̲h̲2̲⟩̲
 
 Note: This linter can be disabled with `set_option linter.constructorExact false`
 -/

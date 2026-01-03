@@ -4,6 +4,7 @@ Released under MIT license as described in the file LICENSE.
 Authors: Jesse Alama
 -/
 import Lean.Elab.Command
+import Lean.Meta.Hint
 
 /-!
 # Have-Rewrite Linter
@@ -103,9 +104,31 @@ partial def flattenTactics (stx : Syntax) : Array Syntax :=
   else
     stx.getArgs.foldl (fun acc child => acc ++ flattenTactics child) #[]
 
+/-- Recursively search for := and return what follows. -/
+partial def findBodyAfterAssign (stx : Syntax) : Option String := do
+  let args := stx.getArgs
+  for i in [0:args.size] do
+    if let .atom _ val := args[i]! then
+      if val == ":=" && i + 1 < args.size then
+        let body := args[i + 1]!
+        if body.isIdent then
+          return body.getId.toString
+        else
+          return toString body.prettyPrint
+    -- Recurse into children
+    if let some result := findBodyAfterAssign args[i]! then
+      return result
+  none
+
+/-- Extract the body/value expression from a have tactic.
+    For `have h : T := e`, returns a string representation of `e`. -/
+def getHaveBody (stx : Syntax) : Option String :=
+  findBodyAfterAssign stx
+
 /-- Find tactic sequences and check for have-rw patterns.
-Only flags when the hypothesis is used ONLY in that one rw and nowhere else. -/
-partial def findHaveRwPatterns (stx : Syntax) : Array Syntax := Id.run do
+Only flags when the hypothesis is used ONLY in that one rw and nowhere else.
+Returns (haveStx, rwStx) pairs. -/
+partial def findHaveRwPatterns (stx : Syntax) : Array (Syntax × Syntax) := Id.run do
   let mut results := #[]
 
   -- Flatten all tactics in this syntax tree
@@ -124,9 +147,15 @@ partial def findHaveRwPatterns (stx : Syntax) : Array Syntax := Id.run do
             let remainingTactics := tactics.toList.drop (i + 2)
             let usesAfterRw := remainingTactics.foldl (fun acc t => acc + countUses t hypName false) 0
             if usesAfterRw == 0 then
-              results := results.push tac1
+              results := results.push (tac1, tac2)
 
   return results
+
+/-- Create a syntax node spanning from start of stx1 to end of stx2. -/
+def mkSpanningSyntax (stx1 stx2 : Syntax) : Option Syntax := do
+  let range1 ← stx1.getRange?
+  let range2 ← stx2.getRange?
+  return Syntax.ofRange ⟨range1.start, range2.stop⟩
 
 /-- The have-rewrite linter: detects `have h := ...; rw [h]` patterns.
 
@@ -139,10 +168,18 @@ def haveRwLinter : Linter where run := withSetOptionIn fun stx => do
     return
   if (← MonadState.get).messages.hasErrors then
     return
-  for haveStx in findHaveRwPatterns stx do
-    Linter.logLint linter.haveRw haveStx
-      "`have` immediately followed by `rw` using only that hypothesis. \
-       Consider using `simp` instead."
+  for (haveStx, rwStx) in findHaveRwPatterns stx do
+    let msg := m!"`have` immediately followed by `rw` using only that hypothesis."
+    -- Extract the have body and generate rw [body]
+    let body := getHaveBody haveStx |>.getD "_"
+    let fixStr := s!"rw [{body}]"
+
+    let suggestion : Meta.Hint.Suggestion := {
+      suggestion := fixStr
+      span? := mkSpanningSyntax haveStx rwStx
+    }
+    let hint ← liftCoreM <| MessageData.hint m!"Inline the expression." #[suggestion]
+    Linter.logLint linter.haveRw haveStx (msg ++ hint)
 
 initialize addLinter haveRwLinter
 
