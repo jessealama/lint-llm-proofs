@@ -44,9 +44,16 @@ def hasDirectAtom (stx : Syntax) (val : String) : Bool :=
   stx.getArgs.any fun arg =>
     if let .atom _ v := arg then v == val else false
 
-/-- Check if syntax is a `simp` tactic by looking for simp keyword as direct child. -/
+/-- Recursively check if syntax contains an atom with the given value. -/
+partial def hasAtom (stx : Syntax) (val : String) : Bool :=
+  if let .atom _ v := stx then v == val
+  else stx.getArgs.any fun arg => hasAtom arg val
+
+/-- Check if syntax is a `simp` tactic that modifies the goal (not a hypothesis).
+    Excludes `simp at h` patterns since those don't affect the goal directly. -/
 def isSimpTactic (stx : Syntax) : Bool :=
-  hasDirectAtom stx "simp" || hasDirectAtom stx "simp_all" || hasDirectAtom stx "simp?"
+  (hasDirectAtom stx "simp" || hasDirectAtom stx "simp_all" || hasDirectAtom stx "simp?") &&
+    !hasAtom stx "at"
 
 /-- Check if syntax is `rfl` tactic. -/
 def isRflTactic (stx : Syntax) : Bool :=

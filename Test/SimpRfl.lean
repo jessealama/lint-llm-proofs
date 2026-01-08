@@ -69,3 +69,31 @@ Note: This linter can be disabled with `set_option linter.simpRfl false`
 #guard_msgs in
 example (a : Nat) : a + 0 = a := by
   simp; rfl
+
+-- Should trigger: simp with arguments followed by rfl
+/--
+error: No goals to be solved
+---
+warning: `rfl` immediately after `simp` is often redundant.
+
+Hint: Remove the redundant `rfl`.
+  simp [Nat.add_zero]
+  ̵ ̵ ̵r̵f̵l̵
+
+Note: This linter can be disabled with `set_option linter.simpRfl false`
+-/
+#guard_msgs in
+example (a : Nat) : a + 0 = a := by
+  simp [Nat.add_zero]
+  rfl
+
+-- Should NOT trigger: simp at hypothesis, not goal
+/--
+warning: unused variable `h`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+-/
+#guard_msgs in
+example (a : Nat) (h : a + 0 = a) : a = a := by
+  simp at h
+  rfl
