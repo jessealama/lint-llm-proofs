@@ -4,7 +4,7 @@ Lean 4 linters for detecting patterns typical of LLM-generated proofs, with auto
 
 ## Features
 
-- Detects 5 common LLM proof anti-patterns
+- Detects 6 common LLM proof anti-patterns
 - **Auto-fix support**: Clickable suggestions in any LSP-compatible editor (VS Code, Emacs, Neovim, etc.)
 - All linters disabled by default for opt-in usage
 - Configurable per-file, per-section, or project-wide
@@ -37,6 +37,7 @@ All linters are disabled by default. Enable them with `set_option`:
 import LintLlmProofs
 
 set_option linter.nestedHave true
+set_option linter.nestedLet true
 set_option linter.haveRw true
 set_option linter.simpRfl true
 set_option linter.sequentialIntros true
@@ -73,6 +74,7 @@ Add to your `lakefile.toml` to enable linters for all files:
 name = "MyProject"
 moreLeanArgs = [
   "-Dlinter.nestedHave=true",
+  "-Dlinter.nestedLet=true",
   "-Dlinter.simpRfl=true",
   "-Dlinter.sequentialIntros=true",
   "-Dlinter.constructorExact=true",
@@ -102,6 +104,7 @@ The diff display shows deletions with strikethrough and insertions underlined.
 | Linter | Option | Pattern | Auto-Fix |
 |--------|--------|---------|----------|
 | Nested Have | `linter.nestedHave` | `have` inside `have` body | Hoist inner `have` |
+| Nested Let | `linter.nestedLet` | `let` inside `let` body | Hoist inner `let` |
 | Have-Rewrite | `linter.haveRw` | `have h := e; rw [h]` | `rw [e]` |
 | Simp-Rfl | `linter.simpRfl` | `simp; rfl` | Remove `rfl` |
 | Sequential Intros | `linter.sequentialIntros` | `intro x; intro y` | `intro x y` |
@@ -123,6 +126,25 @@ example : True := by
 example : True := by
   have h2 : 2 = 2 := rfl
   have h1 : 1 = 1 := rfl
+  trivial
+```
+
+### Nested Let (`linter.nestedLet`)
+
+Detects nested `let` statements. Similar to nested `have`, LLMs sometimes produce deeply nested `let` chains.
+
+```lean
+-- Flagged:
+example : True := by
+  let x := 1 + by
+    let y := 2  -- Warning
+    exact 0
+  trivial
+
+-- Suggested:
+example : True := by
+  let y := 2
+  let x := 1
   trivial
 ```
 
