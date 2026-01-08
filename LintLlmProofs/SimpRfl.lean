@@ -64,9 +64,16 @@ def isExactRflTactic (stx : Syntax) : Bool :=
 def isRflOrExactRfl (stx : Syntax) : Bool :=
   isRflTactic stx || isExactRflTactic stx
 
+/-- Check if syntax is a tactic (not a sequence container). -/
+def isTactic (stx : Syntax) : Bool :=
+  let kind := stx.getKind
+  kind.toString.startsWith "Lean.Parser.Tactic." &&
+    kind != ``Lean.Parser.Tactic.tacticSeq &&
+    kind != ``Lean.Parser.Tactic.tacticSeq1Indented
+
 /-- Flatten a tactic sequence into a list of individual tactics. -/
 partial def flattenTactics (stx : Syntax) : Array Syntax :=
-  if isSimpTactic stx || isRflOrExactRfl stx then
+  if isTactic stx then
     #[stx]
   else if stx.getKind == ``Lean.Parser.Tactic.tacticSeq ||
           stx.getKind == ``Lean.Parser.Tactic.tacticSeq1Indented then
