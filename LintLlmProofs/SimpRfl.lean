@@ -44,9 +44,16 @@ def hasDirectAtom (stx : Syntax) (val : String) : Bool :=
   stx.getArgs.any fun arg =>
     if let .atom _ v := arg then v == val else false
 
-/-- Check if syntax is a `simp` tactic by looking for simp keyword as direct child. -/
+/-- Recursively check if syntax contains an atom with the given value. -/
+partial def hasAtom (stx : Syntax) (val : String) : Bool :=
+  if let .atom _ v := stx then v == val
+  else stx.getArgs.any fun arg => hasAtom arg val
+
+/-- Check if syntax is a `simp` tactic that modifies the goal (not a hypothesis).
+    Excludes `simp at h` patterns since those don't affect the goal directly. -/
 def isSimpTactic (stx : Syntax) : Bool :=
-  hasDirectAtom stx "simp" || hasDirectAtom stx "simp_all" || hasDirectAtom stx "simp?"
+  (hasDirectAtom stx "simp" || hasDirectAtom stx "simp_all" || hasDirectAtom stx "simp?") &&
+    !hasAtom stx "at"
 
 /-- Check if syntax is `rfl` tactic. -/
 def isRflTactic (stx : Syntax) : Bool :=
@@ -64,9 +71,16 @@ def isExactRflTactic (stx : Syntax) : Bool :=
 def isRflOrExactRfl (stx : Syntax) : Bool :=
   isRflTactic stx || isExactRflTactic stx
 
+/-- Check if syntax is a tactic (not a sequence container). -/
+def isTactic (stx : Syntax) : Bool :=
+  let kind := stx.getKind
+  kind.toString.startsWith "Lean.Parser.Tactic." &&
+    kind != ``Lean.Parser.Tactic.tacticSeq &&
+    kind != ``Lean.Parser.Tactic.tacticSeq1Indented
+
 /-- Flatten a tactic sequence into a list of individual tactics. -/
 partial def flattenTactics (stx : Syntax) : Array Syntax :=
-  if isSimpTactic stx || isRflOrExactRfl stx then
+  if isTactic stx then
     #[stx]
   else if stx.getKind == ``Lean.Parser.Tactic.tacticSeq ||
           stx.getKind == ``Lean.Parser.Tactic.tacticSeq1Indented then
